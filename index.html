@@ -35,7 +35,7 @@
     // Define BLE Device Specs
     var deviceName = 'ESP32';
     var bleService = '19b10000-e8f2-537e-4f6c-d104768a1214'; // Update as needed
-    var accCharacteristic = '19b10003-e8f2-537e-4f6c-d104768a1214'; // Update as needed
+    var accCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214'; // Correct UUID for accelerometer data
 
     // Global Variables to Handle Bluetooth
     var bleServer;
@@ -56,7 +56,7 @@
     // Function to connect to BLE
     function connectToDevice() {
         navigator.bluetooth.requestDevice({
-            filters: [{ name: deviceName }],
+            filters: [{ name: deviceName }], 
             optionalServices: [bleService]
         })
         .then(device => {
@@ -87,14 +87,17 @@
     // Handle ACC Data Change
     function handleAccChange(event) {
         const value = event.target.value;
-        const x = value.getInt16(0, true); // Assuming 16-bit signed integers, little-endian
-        const y = value.getInt16(2, true);
-        const z = value.getInt16(4, true);
+        const accData = new TextDecoder().decode(value); // Decode the string sent by ESP32
+        const accValues = accData.split(','); // Split the CSV data
 
-        accX.innerHTML = x;
-        accY.innerHTML = y;
-        accZ.innerHTML = z;
+        // Display the accelerometer values
+        if (accValues.length === 3) {
+            accX.innerHTML = accValues[0];
+            accY.innerHTML = accValues[1];
+            accZ.innerHTML = accValues[2];
+        }
 
+        // Update timestamp
         timestampContainer.innerHTML = new Date().toLocaleString();
     }
 
