@@ -17,6 +17,19 @@
   <p>Z: <span id="accZ">0</span></p>
   <p>Last reading: <span id="timestamp"></span></p>
 
+  <h2>Club Head Speed</h2>
+  <p>Current Speed: <span id="currentSpeed">0</span> m/s</p>
+  <p>Max Speed: <span id="maxSpeed">0</span> m/s</p>
+
+  <h3>Last 5 Speeds</h3>
+  <ul id="lastSpeeds">
+    <li>Speed 1: <span id="speed1">0</span> m/s</li>
+    <li>Speed 2: <span id="speed2">0</span> m/s</li>
+    <li>Speed 3: <span id="speed3">0</span> m/s</li>
+    <li>Speed 4: <span id="speed4">0</span> m/s</li>
+    <li>Speed 5: <span id="speed5">0</span> m/s</li>
+  </ul>
+
   <h2>Control GPIO 2</h2>
   <button id="onButton">ON</button>
   <button id="offButton">OFF</button>
@@ -31,16 +44,24 @@
     const accZ = document.getElementById('accZ');
     const bleStateContainer = document.getElementById('bleState');
     const timestampContainer = document.getElementById('timestamp');
+    const currentSpeedContainer = document.getElementById('currentSpeed');
+    const maxSpeedContainer = document.getElementById('maxSpeed');
+    const lastSpeedsContainer = document.getElementById('lastSpeeds');
 
     // Define BLE Device Specs
     var deviceName = 'ESP32';
     var bleService = '19b10000-e8f2-537e-4f6c-d104768a1214'; // Update as needed
-    var accCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214'; // Correct UUID for accelerometer data
+    var accCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214'; // Update as needed
 
     // Global Variables to Handle Bluetooth
     var bleServer;
     var bleServiceFound;
     var accCharacteristicFound;
+
+    // Store the last 5 speeds
+    var lastSpeeds = [0, 0, 0, 0, 0];
+    var currentSpeed = 0;
+    var maxSpeed = 0;
 
     // Connect to BLE Device
     connectButton.addEventListener('click', () => {
@@ -56,7 +77,7 @@
     // Function to connect to BLE
     function connectToDevice() {
         navigator.bluetooth.requestDevice({
-            filters: [{ name: deviceName }], 
+            filters: [{ name: deviceName }],
             optionalServices: [bleService]
         })
         .then(device => {
@@ -87,18 +108,42 @@
     // Handle ACC Data Change
     function handleAccChange(event) {
         const value = event.target.value;
-        const accData = new TextDecoder().decode(value); // Decode the string sent by ESP32
-        const accValues = accData.split(','); // Split the CSV data
+        const x = value.getInt16(0, true); // Assuming 16-bit signed integers, little-endian
+        const y = value.getInt16(2, true);
+        const z = value.getInt16(4, true);
 
-        // Display the accelerometer values
-        if (accValues.length === 3) {
-            accX.innerHTML = accValues[0];
-            accY.innerHTML = accValues[1];
-            accZ.innerHTML = accValues[2];
+        accX.innerHTML = x;
+        accY.innerHTML = y;
+        accZ.innerHTML = z;
+
+        timestampContainer.innerHTML = new Date().toLocaleString();
+
+        // Calculate club head speed and update the last speeds
+        calculateClubHeadSpeed(x, y, z);
+    }
+
+    function calculateClubHeadSpeed(x, y, z) {
+        // Calculate magnitude of the acceleration vector
+        const magnitude = Math.sqrt(x * x + y * y + z * z);
+
+        // Update current speed and check for new max speed
+        currentSpeed = magnitude * 0.1; // Example conversion factor for demonstration
+        if (currentSpeed > maxSpeed) {
+            maxSpeed = currentSpeed;
         }
 
-        // Update timestamp
-        timestampContainer.innerHTML = new Date().toLocaleString();
+        // Update last 5 speeds (circular buffer)
+        lastSpeeds.unshift(currentSpeed); // Add new speed to the front
+        lastSpeeds.pop(); // Remove the oldest speed
+
+        // Update the display
+        currentSpeedContainer.innerHTML = currentSpeed.toFixed(2);
+        maxSpeedContainer.innerHTML = maxSpeed.toFixed(2);
+
+        // Update the last 5 speeds in the list
+        for (let i = 0; i < lastSpeeds.length; i++) {
+            document.getElementById(`speed${i + 1}`).innerHTML = lastSpeeds[i].toFixed(2);
+        }
     }
 
     function disconnectDevice() {
