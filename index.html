@@ -1,162 +1,71 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ESP32 Web BLE App</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="icon" type="image/png" href="">
+    <title>ESP32 Golf Swing Speed</title>
 </head>
 <body>
-  <h1>ESP32 Web BLE Application</h1>
-  <button id="connectBleButton">Connect to BLE Device</button>
-  <button id="disconnectBleButton">Disconnect BLE Device</button>
-  <p>BLE state: <strong><span id="bleState" style="color:#d13a30;">Disconnected</span></strong></p>
-
-  <h2>ACC Data</h2>
-  <p>X: <span id="accX">0</span></p>
-  <p>Y: <span id="accY">0</span></p>
-  <p>Z: <span id="accZ">0</span></p>
-  <p>Last reading: <span id="timestamp"></span></p>
+  <h1>Golf Swing Speed Monitor</h1>
+  <button id="connectButton">Connect to BLE</button>
+  <button id="disconnectButton">Disconnect</button>
+  <p>BLE State: <span id="bleState">Disconnected</span></p>
 
   <h2>Club Head Speed</h2>
   <p>Current Speed: <span id="currentSpeed">0</span> m/s</p>
   <p>Max Speed: <span id="maxSpeed">0</span> m/s</p>
-
+  
   <h3>Last 5 Speeds</h3>
-  <ul id="lastSpeeds">
-    <li>Speed 1: <span id="speed1">0</span> m/s</li>
-    <li>Speed 2: <span id="speed2">0</span> m/s</li>
-    <li>Speed 3: <span id="speed3">0</span> m/s</li>
-    <li>Speed 4: <span id="speed4">0</span> m/s</li>
-    <li>Speed 5: <span id="speed5">0</span> m/s</li>
+  <ul>
+    <li>Speed 1: <span id="speed1">0</span></li>
+    <li>Speed 2: <span id="speed2">0</span></li>
+    <li>Speed 3: <span id="speed3">0</span></li>
+    <li>Speed 4: <span id="speed4">0</span></li>
+    <li>Speed 5: <span id="speed5">0</span></li>
   </ul>
 
-  <h2>Control GPIO 2</h2>
-  <button id="onButton">ON</button>
-  <button id="offButton">OFF</button>
-  <p>Last value sent: <span id="valueSent"></span></p>
-
   <script>
-    // DOM Elements
-    const connectButton = document.getElementById('connectBleButton');
-    const disconnectButton = document.getElementById('disconnectBleButton');
-    const accX = document.getElementById('accX');
-    const accY = document.getElementById('accY');
-    const accZ = document.getElementById('accZ');
-    const bleStateContainer = document.getElementById('bleState');
-    const timestampContainer = document.getElementById('timestamp');
-    const currentSpeedContainer = document.getElementById('currentSpeed');
-    const maxSpeedContainer = document.getElementById('maxSpeed');
-    const lastSpeedsContainer = document.getElementById('lastSpeeds');
+    let bleDevice;
+    let bleCharacteristic;
 
-    // Define BLE Device Specs
-    var deviceName = 'ESP32';
-    var bleService = '19b10000-e8f2-537e-4f6c-d104768a1214'; // Update as needed
-    var accCharacteristic = '19b10002-e8f2-537e-4f6c-d104768a1214'; // Update as needed
+    document.getElementById('connectButton').addEventListener('click', connectBLE);
+    document.getElementById('disconnectButton').addEventListener('click', disconnectBLE);
 
-    // Global Variables to Handle Bluetooth
-    var bleServer;
-    var bleServiceFound;
-    var accCharacteristicFound;
-
-    // Store the last 5 speeds
-    var lastSpeeds = [0, 0, 0, 0, 0];
-    var currentSpeed = 0;
-    var maxSpeed = 0;
-
-    // Connect to BLE Device
-    connectButton.addEventListener('click', () => {
-        if (navigator.bluetooth) {
-            connectToDevice();
-        } else {
-            bleStateContainer.innerHTML = "Web Bluetooth API not supported.";
-        }
-    });
-
-    disconnectButton.addEventListener('click', disconnectDevice);
-
-    // Function to connect to BLE
-    function connectToDevice() {
-        navigator.bluetooth.requestDevice({
-            filters: [{ name: deviceName }],
-            optionalServices: [bleService]
-        })
-        .then(device => {
-            bleStateContainer.innerHTML = `Connected to device ${device.name}`;
-            bleStateContainer.style.color = "#24af37";
-            device.addEventListener('gattservicedisconnected', onDisconnected);
-            return device.gatt.connect();
-        })
-        .then(server => {
-            bleServer = server;
-            return server.getPrimaryService(bleService);
-        })
-        .then(service => {
-            bleServiceFound = service;
-            return service.getCharacteristic(accCharacteristic);
-        })
-        .then(characteristic => {
-            accCharacteristicFound = characteristic;
-            characteristic.addEventListener('characteristicvaluechanged', handleAccChange);
-            return characteristic.startNotifications();
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            bleStateContainer.innerHTML = "Error connecting to device.";
-        });
+    function connectBLE() {
+      navigator.bluetooth.requestDevice({
+        filters: [{ name: 'ESP32 Golf Sensor' }],
+        optionalServices: ['19b10000-e8f2-537e-4f6c-d104768a1214']
+      })
+      .then(device => {
+        bleDevice = device;
+        document.getElementById('bleState').textContent = 'Connected';
+        return device.gatt.connect();
+      })
+      .then(server => server.getPrimaryService('19b10000-e8f2-537e-4f6c-d104768a1214'))
+      .then(service => service.getCharacteristic('19b10003-e8f2-537e-4f6c-d104768a1214'))
+      .then(characteristic => {
+        bleCharacteristic = characteristic;
+        characteristic.addEventListener('characteristicvaluechanged', handleData);
+        return characteristic.startNotifications();
+      });
     }
 
-    // Handle ACC Data Change
-    function handleAccChange(event) {
-        const value = event.target.value;
-        const x = value.getInt16(0, true); // Assuming 16-bit signed integers, little-endian
-        const y = value.getInt16(2, true);
-        const z = value.getInt16(4, true);
+    function handleData(event) {
+      const value = new TextDecoder().decode(event.target.value);
+      const [current, max, s1, s2, s3, s4, s5] = value.split(",");
 
-        accX.innerHTML = x;
-        accY.innerHTML = y;
-        accZ.innerHTML = z;
-
-        timestampContainer.innerHTML = new Date().toLocaleString();
-
-        // Calculate club head speed and update the last speeds
-        calculateClubHeadSpeed(x, y, z);
+      document.getElementById('currentSpeed').textContent = current;
+      document.getElementById('maxSpeed').textContent = max;
+      document.getElementById('speed1').textContent = s1;
+      document.getElementById('speed2').textContent = s2;
+      document.getElementById('speed3').textContent = s3;
+      document.getElementById('speed4').textContent = s4;
+      document.getElementById('speed5').textContent = s5;
     }
 
-    function calculateClubHeadSpeed(x, y, z) {
-        // Calculate magnitude of the acceleration vector
-        const magnitude = Math.sqrt(x * x + y * y + z * z);
-
-        // Update current speed and check for new max speed
-        currentSpeed = magnitude * 0.1; // Example conversion factor for demonstration
-        if (currentSpeed > maxSpeed) {
-            maxSpeed = currentSpeed;
-        }
-
-        // Update last 5 speeds (circular buffer)
-        lastSpeeds.unshift(currentSpeed); // Add new speed to the front
-        lastSpeeds.pop(); // Remove the oldest speed
-
-        // Update the display
-        currentSpeedContainer.innerHTML = currentSpeed.toFixed(2);
-        maxSpeedContainer.innerHTML = maxSpeed.toFixed(2);
-
-        // Update the last 5 speeds in the list
-        for (let i = 0; i < lastSpeeds.length; i++) {
-            document.getElementById(`speed${i + 1}`).innerHTML = lastSpeeds[i].toFixed(2);
-        }
-    }
-
-    function disconnectDevice() {
-        if (bleServer && bleServer.connected) {
-            bleServer.disconnect();
-            bleStateContainer.innerHTML = "Disconnected";
-            bleStateContainer.style.color = "#d13a30";
-        }
-    }
-
-    function onDisconnected() {
-        bleStateContainer.innerHTML = "Device disconnected.";
-        bleStateContainer.style.color = "#d13a30";
+    function disconnectBLE() {
+      if (bleDevice) {
+        bleDevice.gatt.disconnect();
+        document.getElementById('bleState').textContent = 'Disconnected';
+      }
     }
   </script>
 </body>
