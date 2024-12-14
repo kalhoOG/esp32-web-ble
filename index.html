@@ -81,7 +81,8 @@
     const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
     const ACC_CHARACTERISTIC_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
-    let lastSpeeds = [0, 0, 0, 0, 0]; // Array to store the last 5 max speeds
+    let lastSpeeds = [0, 0, 0, 0, 0]; // Array to store the last 5 max speeds for individual swings
+    let currentMaxSpeed = 0; // To track the max speed for the current swing
 
     async function connectToBLE() {
       try {
@@ -132,23 +133,29 @@
       // Assuming data is sent in format: "x,y,z,speed,maxSpeed"
       const [x, y, z, speed, maxSpeed] = sensorData.split(",");
 
-      // Update the displayed values
+      // Update the displayed values for the current swing data
       document.getElementById("accX").innerText = parseFloat(x).toFixed(2);
       document.getElementById("accY").innerText = parseFloat(y).toFixed(2);
       document.getElementById("accZ").innerText = parseFloat(z).toFixed(2);
       document.getElementById("clubSpeed").innerText = parseFloat(speed).toFixed(2);
-      document.getElementById("maxSpeed").innerText = parseFloat(maxSpeed).toFixed(2);
 
-      // Update the last 5 max speeds
-      updateLastSpeeds(parseFloat(maxSpeed));
+      // Update current max speed for the ongoing swing
+      currentMaxSpeed = Math.max(currentMaxSpeed, parseFloat(maxSpeed));
+      
+      // Update the last 5 speeds when the swing ends (when maxSpeed value is received)
+      document.getElementById("maxSpeed").innerText = currentMaxSpeed.toFixed(2);
+      updateLastSpeeds(currentMaxSpeed);
+
+      // Reset for next swing
+      currentMaxSpeed = 0; // Reset max speed for the next swing
     }
 
     function updateLastSpeeds(newMaxSpeed) {
-      // Update the array of last speeds (circular buffer)
-      lastSpeeds.unshift(newMaxSpeed); // Add new speed to the beginning
+      // Update the array of last max speeds (circular buffer)
+      lastSpeeds.unshift(newMaxSpeed); // Add new max speed to the beginning
       lastSpeeds.pop(); // Remove the last speed to keep the array size 5
 
-      // Update the displayed values for the last 5 speeds
+      // Update the displayed values for the last 5 max speeds
       for (let i = 0; i < 5; i++) {
         document.getElementById(`speed${i+1}`).innerText = `Speed ${i+1}: ${lastSpeeds[i].toFixed(2)} m/s`;
       }
@@ -165,6 +172,9 @@
       for (let i = 0; i < 5; i++) {
         document.getElementById(`speed${i+1}`).innerText = `Speed ${i+1}: 0.00 m/s`;
       }
+
+      // Reset the current swing's max speed
+      currentMaxSpeed = 0;
     }
   </script>
 </body>
