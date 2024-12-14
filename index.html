@@ -1,108 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>ESP32 Golf Swing Monitor</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Club Head Speed Monitor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f4f4f9;
+      color: #333;
+    }
+
+    h1, h2 {
+      color: #0056b3;
+    }
+
+    button {
+      background-color: #007BFF;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      margin-top: 10px;
+      cursor: pointer;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+
+    button:disabled {
+      background-color: #aaa;
+      cursor: not-allowed;
+    }
+
+    #data-container {
+      margin-top: 20px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      background-color: #fff;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    p {
+      margin: 5px 0;
+    }
+
+    span {
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-    <h1>ESP32 Golf Swing Monitor</h1>
+  <h1>Club Head Speed Monitor</h1>
+  <p>Click the button below to connect to the BLE device:</p>
+  <button id="connectButton" onclick="connectToBLE()">Connect to BLE Device</button>
+  <button id="disconnectButton" onclick="disconnectBLE()" disabled>Disconnect</button>
 
-    <!-- BLE Connection -->
-    <button id="connectButton">Connect to BLE Device</button>
-    <button id="disconnectButton">Disconnect</button>
-    <p>Status: <strong><span id="bleStatus" style="color: red;">Disconnected</span></strong></p>
+  <div id="data-container">
+    <h2>Sensor Data</h2>
+    <p>X: <span id="accX">0.00</span> m/s²</p>
+    <p>Y: <span id="accY">0.00</span> m/s²</p>
+    <p>Z: <span id="accZ">0.00</span> m/s²</p>
+    <p>Current Speed: <span id="clubSpeed">0.00</span> m/s</p>
+    <p>Max Speed: <span id="maxSpeed">0.00</span> m/s</p>
+    <p>Last 5 Speeds:</p>
+    <div id="lastFiveSpeeds"></div>
+  </div>
 
-    <!-- Display Club Head Speed Data -->
-    <h2>Current Club Head Speed</h2>
-    <p><strong>Speed:</strong> <span id="currentSpeed">0</span> m/s</p>
+  <script>
+    let bleDevice = null;
+    let accCharacteristic = null;
+    let isConnected = false;
 
-    <h2>Maximum Club Head Speed</h2>
-    <p><strong>Max Speed:</strong> <span id="maxSpeed">0</span> m/s</p>
+    async function connectToBLE() {
+      try {
+        console.log("Requesting BLE Device...");
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ name: "ESP32" }],
+          optionalServices: ["19b10000-e8f2-537e-4f6c-d104768a1214"]
+        });
 
-    <h2>Last 5 Club Head Speeds</h2>
-    <ul id="lastFiveSpeeds">
-        <li>0 m/s</li>
-        <li>0 m/s</li>
-        <li>0 m/s</li>
-        <li>0 m/s</li>
-        <li>0 m/s</li>
-    </ul>
+        console.log("Connecting to GATT Server...");
+        const server = await bleDevice.gatt.connect();
 
-    <script>
-        // BLE Characteristic UUIDs (Ensure these match the C++ code)
-        const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
-        const CLUB_SPEED_UUID = "19b10004-e8f2-537e-4f6c-d104768a1214";
-        const MAX_SPEED_UUID = "19b10005-e8f2-537e-4f6c-d104768a1214";
-        const LAST_FIVE_UUID = "19b10006-e8f2-537e-4f6c-d104768a1214";
+        console.log("Getting Service...");
+        const service = await server.getPrimaryService("19b10000-e8f2-537e-4f6c-d104768a1214");
 
-        let device;
-        let bleServer;
-        let clubSpeedCharacteristic;
-        let maxSpeedCharacteristic;
-        let lastFiveCharacteristic;
+        console.log("Getting Accelerometer Characteristic...");
+        accCharacteristic = await service.getCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214");
 
-        const bleStatus = document.getElementById("bleStatus");
-        const currentSpeed = document.getElementById("currentSpeed");
-        const maxSpeed = document.getElementById("maxSpeed");
-        const lastFiveSpeeds = document.getElementById("lastFiveSpeeds");
+        // Set up notifications
+        console.log("Starting Notifications...");
+        await accCharacteristic.startNotifications();
+        accCharacteristic.addEventListener('characteristicvaluechanged', handleAccChange);
 
-        document.getElementById("connectButton").addEventListener("click", connectToDevice);
-        document.getElementById("disconnectButton").addEventListener("click", disconnectDevice);
+        isConnected = true;
+        document.getElementById("connectButton").disabled = true;
+        document.getElementById("disconnectButton").disabled = false;
 
-        async function connectToDevice() {
-            try {
-                // Request device
-                device = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: [SERVICE_UUID] }]
-                });
+        console.log("Connected! Waiting for data...");
+      } catch (error) {
+        console.error("Connection failed!", error);
+      }
+    }
 
-                bleStatus.textContent = "Connecting...";
-                bleStatus.style.color = "orange";
+    function disconnectBLE() {
+      if (bleDevice && bleDevice.gatt.connected) {
+        bleDevice.gatt.disconnect();
+        console.log("Disconnected from BLE Device.");
+      }
 
-                // Connect and get services
-                bleServer = await device.gatt.connect();
-                const service = await bleServer.getPrimaryService(SERVICE_UUID);
+      isConnected = false;
+      document.getElementById("connectButton").disabled = false;
+      document.getElementById("disconnectButton").disabled = true;
 
-                // Get characteristics
-                clubSpeedCharacteristic = await service.getCharacteristic(CLUB_SPEED_UUID);
-                maxSpeedCharacteristic = await service.getCharacteristic(MAX_SPEED_UUID);
-                lastFiveCharacteristic = await service.getCharacteristic(LAST_FIVE_UUID);
+      // Reset displayed values
+      resetDisplay();
+    }
 
-                // Start notifications
-                clubSpeedCharacteristic.addEventListener("characteristicvaluechanged", handleClubSpeed);
-                await clubSpeedCharacteristic.startNotifications();
+    function handleAccChange(event) {
+      const decoder = new TextDecoder("utf-8");
+      const jsonString = decoder.decode(event.target.value);
 
-                maxSpeedCharacteristic.addEventListener("characteristicvaluechanged", handleMaxSpeed);
-                await maxSpeedCharacteristic.startNotifications();
+      try {
+        const data = JSON.parse(jsonString);
 
-                lastFiveCharacteristic.addEventListener("characteristicvaluechanged", handleLastFive);
-                await lastFiveCharacteristic.startNotifications();
+        // Update display values
+        document.getElementById("accX").innerText = data.X.toFixed(2);
+        document.getElementById("accY").innerText = data.Y.toFixed(2);
+        document.getElementById("accZ").innerText = data.Z.toFixed(2);
+        document.getElementById("clubSpeed").innerText = data.Speed.toFixed(2);
+        document.getElementById("maxSpeed").innerText = data.MaxSpeed.toFixed(2);
 
-                bleStatus.textContent = "Connected";
-                bleStatus.style.color = "green";
+        // Display the last 5 speeds
+        const lastFiveContainer = document.getElementById("lastFiveSpeeds");
+        lastFiveContainer.innerHTML = ""; // Clear previous entries
+        data.Last5.forEach((speed, index) => {
+          lastFiveContainer.innerHTML += `Speed ${index + 1}: <span>${speed}</span> m/s<br>`;
+        });
+      } catch (error) {
+        console.error("Failed to parse JSON data:", error);
+      }
+    }
 
-            } catch (error) {
-                console.error(error);
-                bleStatus.textContent = "Connection Failed";
-                bleStatus.style.color = "red";
-            }
-        }
-
-        function disconnectDevice() {
-            if (device && device.gatt.connected) {
-                device.gatt.disconnect();
-                bleStatus.textContent = "Disconnected";
-                bleStatus.style.color = "red";
-            }
-        }
-
-        // Update Current Club Head Speed
-        function handleClubSpeed(event) {
-            const speed = event.target.value.getFloat32(0, true); // Assuming 4-byte float
-            currentSpeed.textContent = speed.toFixed(2);
-        }
-
-        // Update Maximum Club Head Speed
-        function handleMaxSpeed(event) {
-            const max = event.target.value.getFloat32(0, true);
-            maxSpeed.textConte
+    function resetDisplay() {
+      document.getElementById("accX").innerText = "0.00";
+      document.getElementById("accY").innerText = "0.00";
+      document.getElementById("accZ").innerText = "0.00";
+      document.getElementById("clubSpeed").innerText = "0.00";
+      document.getElementById("maxSpeed").innerText = "0.00";
+      document.getElementById("lastFiveSpeeds").innerHTML = "";
+    }
+  </script>
+</body>
+</html>
