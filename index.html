@@ -11,11 +11,9 @@
       background-color: #f4f4f9;
       color: #333;
     }
-
     h1, h2 {
       color: #0056b3;
     }
-
     button {
       background-color: #007BFF;
       color: white;
@@ -26,25 +24,20 @@
       border-radius: 5px;
       font-size: 16px;
     }
-
     button:disabled {
       background-color: #aaa;
       cursor: not-allowed;
     }
-
     #data-container {
       margin-top: 20px;
       padding: 10px;
       border: 1px solid #ccc;
       border-radius: 5px;
       background-color: #fff;
-      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     }
-
     p {
       margin: 5px 0;
     }
-
     span {
       font-weight: bold;
     }
@@ -61,86 +54,73 @@
     <p>X: <span id="accX">0.00</span> m/s²</p>
     <p>Y: <span id="accY">0.00</span> m/s²</p>
     <p>Z: <span id="accZ">0.00</span> m/s²</p>
-    <p>Current Speed: <span id="clubSpeed">0.00</span> m/s</p>
+    <p>Speed: <span id="clubSpeed">0.00</span> m/s</p>
     <p>Max Speed: <span id="maxSpeed">0.00</span> m/s</p>
-    <p>Last 5 Speeds:</p>
-    <div id="lastFiveSpeeds"></div>
   </div>
 
   <script>
     let bleDevice = null;
     let accCharacteristic = null;
-    let isConnected = false;
+
+    // UUIDs for BLE service and characteristic
+    const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+    const ACC_CHARACTERISTIC_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
 
     async function connectToBLE() {
       try {
         console.log("Requesting BLE Device...");
         bleDevice = await navigator.bluetooth.requestDevice({
-          filters: [{ name: "ESP32" }],
-          optionalServices: ["19b10000-e8f2-537e-4f6c-d104768a1214"]
+          filters: [{ name: "ESP32" }], // Match ESP32 device name
+          optionalServices: [SERVICE_UUID]
         });
 
         console.log("Connecting to GATT Server...");
         const server = await bleDevice.gatt.connect();
 
         console.log("Getting Service...");
-        const service = await server.getPrimaryService("19b10000-e8f2-537e-4f6c-d104768a1214");
+        const service = await server.getPrimaryService(SERVICE_UUID);
 
-        console.log("Getting Accelerometer Characteristic...");
-        accCharacteristic = await service.getCharacteristic("19b10002-e8f2-537e-4f6c-d104768a1214");
+        console.log("Getting Characteristic...");
+        accCharacteristic = await service.getCharacteristic(ACC_CHARACTERISTIC_UUID);
 
-        // Set up notifications
         console.log("Starting Notifications...");
         await accCharacteristic.startNotifications();
         accCharacteristic.addEventListener('characteristicvaluechanged', handleAccChange);
 
-        isConnected = true;
         document.getElementById("connectButton").disabled = true;
         document.getElementById("disconnectButton").disabled = false;
 
         console.log("Connected! Waiting for data...");
       } catch (error) {
-        console.error("Connection failed!", error);
+        console.error("Connection failed:", error);
       }
     }
 
     function disconnectBLE() {
       if (bleDevice && bleDevice.gatt.connected) {
         bleDevice.gatt.disconnect();
-        console.log("Disconnected from BLE Device.");
+        console.log("Disconnected.");
       }
 
-      isConnected = false;
       document.getElementById("connectButton").disabled = false;
       document.getElementById("disconnectButton").disabled = true;
-
-      // Reset displayed values
       resetDisplay();
     }
 
     function handleAccChange(event) {
       const decoder = new TextDecoder("utf-8");
-      const jsonString = decoder.decode(event.target.value);
+      const sensorData = decoder.decode(event.target.value);
+      console.log("Received Data:", sensorData);
 
-      try {
-        const data = JSON.parse(jsonString);
+      // Assuming data is sent in format: "x,y,z,speed,maxSpeed"
+      const [x, y, z, speed, maxSpeed] = sensorData.split(",");
 
-        // Update display values
-        document.getElementById("accX").innerText = data.X.toFixed(2);
-        document.getElementById("accY").innerText = data.Y.toFixed(2);
-        document.getElementById("accZ").innerText = data.Z.toFixed(2);
-        document.getElementById("clubSpeed").innerText = data.Speed.toFixed(2);
-        document.getElementById("maxSpeed").innerText = data.MaxSpeed.toFixed(2);
-
-        // Display the last 5 speeds
-        const lastFiveContainer = document.getElementById("lastFiveSpeeds");
-        lastFiveContainer.innerHTML = ""; // Clear previous entries
-        data.Last5.forEach((speed, index) => {
-          lastFiveContainer.innerHTML += `Speed ${index + 1}: <span>${speed}</span> m/s<br>`;
-        });
-      } catch (error) {
-        console.error("Failed to parse JSON data:", error);
-      }
+      // Update the displayed values
+      document.getElementById("accX").innerText = parseFloat(x).toFixed(2);
+      document.getElementById("accY").innerText = parseFloat(y).toFixed(2);
+      document.getElementById("accZ").innerText = parseFloat(z).toFixed(2);
+      document.getElementById("clubSpeed").innerText = parseFloat(speed).toFixed(2);
+      document.getElementById("maxSpeed").innerText = parseFloat(maxSpeed).toFixed(2);
     }
 
     function resetDisplay() {
@@ -149,7 +129,6 @@
       document.getElementById("accZ").innerText = "0.00";
       document.getElementById("clubSpeed").innerText = "0.00";
       document.getElementById("maxSpeed").innerText = "0.00";
-      document.getElementById("lastFiveSpeeds").innerHTML = "";
     }
   </script>
 </body>
