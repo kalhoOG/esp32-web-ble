@@ -41,6 +41,12 @@
     span {
       font-weight: bold;
     }
+    #lastSpeeds {
+      margin-top: 20px;
+    }
+    #lastSpeeds p {
+      margin: 2px 0;
+    }
   </style>
 </head>
 <body>
@@ -56,6 +62,15 @@
     <p>Z: <span id="accZ">0.00</span> m/s²</p>
     <p>Speed: <span id="clubSpeed">0.00</span> m/s</p>
     <p>Max Speed: <span id="maxSpeed">0.00</span> m/s</p>
+    
+    <div id="lastSpeeds">
+      <h2>Last 5 Max Speeds</h2>
+      <p id="speed1">Speed 1: 0.00 m/s</p>
+      <p id="speed2">Speed 2: 0.00 m/s</p>
+      <p id="speed3">Speed 3: 0.00 m/s</p>
+      <p id="speed4">Speed 4: 0.00 m/s</p>
+      <p id="speed5">Speed 5: 0.00 m/s</p>
+    </div>
   </div>
 
   <script>
@@ -65,6 +80,8 @@
     // UUIDs for BLE service and characteristic
     const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
     const ACC_CHARACTERISTIC_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
+
+    let lastSpeeds = [0, 0, 0, 0, 0]; // Array to store the last 5 max speeds
 
     async function connectToBLE() {
       try {
@@ -121,6 +138,20 @@
       document.getElementById("accZ").innerText = parseFloat(z).toFixed(2);
       document.getElementById("clubSpeed").innerText = parseFloat(speed).toFixed(2);
       document.getElementById("maxSpeed").innerText = parseFloat(maxSpeed).toFixed(2);
+
+      // Update the last 5 max speeds
+      updateLastSpeeds(parseFloat(maxSpeed));
+    }
+
+    function updateLastSpeeds(newMaxSpeed) {
+      // Update the array of last speeds (circular buffer)
+      lastSpeeds.unshift(newMaxSpeed); // Add new speed to the beginning
+      lastSpeeds.pop(); // Remove the last speed to keep the array size 5
+
+      // Update the displayed values for the last 5 speeds
+      for (let i = 0; i < 5; i++) {
+        document.getElementById(`speed${i+1}`).innerText = `Speed ${i+1}: ${lastSpeeds[i].toFixed(2)} m/s`;
+      }
     }
 
     function resetDisplay() {
@@ -129,6 +160,11 @@
       document.getElementById("accZ").innerText = "0.00";
       document.getElementById("clubSpeed").innerText = "0.00";
       document.getElementById("maxSpeed").innerText = "0.00";
+      
+      // Reset last speeds
+      for (let i = 0; i < 5; i++) {
+        document.getElementById(`speed${i+1}`).innerText = `Speed ${i+1}: 0.00 m/s`;
+      }
     }
   </script>
 </body>
